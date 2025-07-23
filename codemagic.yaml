@@ -6,6 +6,8 @@ workflows:
     integrations:
       app_store_connect: CodeMagic # Use the name you gave your API key in Codemagic UI
     environment:
+      groups:
+        - group-1
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.remove.help
