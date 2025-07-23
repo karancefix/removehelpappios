@@ -1,6 +1,6 @@
 workflows:
-  ios-eas-build:
-    name: iOS EAS Build
+  ios-native:
+    name: iOS Native Build
     environment:
       vars:
         EXPO_PUBLIC_SUPABASE_URL: $EXPO_PUBLIC_SUPABASE_URL
@@ -11,19 +11,27 @@ workflows:
     scripts:
       - name: Install dependencies
         script: yarn install --frozen-lockfile || npm install
-      - name: Install EAS CLI
-        script: npm install -g eas-cli
-      - name: EAS Build iOS
+      - name: Install CocoaPods dependencies
+        script: cd ios && pod install && cd ..
+      - name: Build iOS app
         script: |
-          eas build --platform ios --profile production --non-interactive --auto-submit
+          xcodebuild -workspace ios/RemoveHelp.xcworkspace \
+            -scheme RemoveHelp \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath $CM_BUILD_DIR/RemoveHelp.xcarchive \
+            clean archive
+      - name: Export .ipa
+        script: |
+          xcodebuild -exportArchive \
+            -archivePath $CM_BUILD_DIR/RemoveHelp.xcarchive \
+            -exportOptionsPlist ios/exportOptions.plist \
+            -exportPath $CM_BUILD_DIR/build/ios
     artifacts:
-      - build/**/outputs/**/*.aab
-      - build/**/outputs/**/*.apk
-      - build/**/outputs/**/*.ipa
-      - build/**/outputs/**/*.app
-      - build/**/outputs/**/*.xcarchive
-      - build/**/outputs/**/*.dSYM.zip
+      - $CM_BUILD_DIR/build/ios/*.ipa
     publishing:
-      email:
-        recipients:
-          - your-email@example.com 
+      app_store_connect:
+        apple_id: $APP_STORE_CONNECT_APPLE_ID
+        api_key: $APP_STORE_CONNECT_API_KEY
+        api_issuer: $APP_STORE_CONNECT_API_ISSUER_ID
+        team_id: $APP_STORE_CONNECT_TEAM_ID 
