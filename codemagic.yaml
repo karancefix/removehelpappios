@@ -1,37 +1,44 @@
 workflows:
-  ios-native:
-    name: iOS Native Build
+  ios-native-workflow:
+    name: iOS Native
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: codemagic # Use the name you gave your API key in Codemagic UI
     environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.remove.help
       vars:
         EXPO_PUBLIC_SUPABASE_URL: $EXPO_PUBLIC_SUPABASE_URL
         EXPO_PUBLIC_SUPABASE_ANON_KEY: $EXPO_PUBLIC_SUPABASE_ANON_KEY
-      node: 18.20.2
+        XCODE_WORKSPACE: "RemoveHelp.xcworkspace"
+        XCODE_SCHEME: "RemoveHelp"
+        APP_STORE_APPLE_ID: 6748972075
       xcode: latest
       cocoapods: default
     scripts:
-      - name: Install dependencies
-        script: yarn install --frozen-lockfile || npm install
       - name: Install CocoaPods dependencies
         script: cd ios && pod install && cd ..
-      - name: Build iOS app
+      - name: Set up provisioning profiles settings on Xcode project
+        script: xcode-project use-profiles
+      - name: Increment build number
         script: |
-          xcodebuild -workspace ios/RemoveHelp.xcworkspace \
-            -scheme RemoveHelp \
-            -configuration Release \
-            -sdk iphoneos \
-            -archivePath $CM_BUILD_DIR/RemoveHelp.xcarchive \
-            clean archive
-      - name: Export .ipa
+          cd $CM_BUILD_DIR
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID")
+          agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
+      - name: Build ipa for distribution
         script: |
-          xcodebuild -exportArchive \
-            -archivePath $CM_BUILD_DIR/RemoveHelp.xcarchive \
-            -exportOptionsPlist ios/exportOptions.plist \
-            -exportPath $CM_BUILD_DIR/build/ios
+          xcode-project build-ipa \
+            --workspace "$CM_BUILD_DIR/$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
     artifacts:
-      - $CM_BUILD_DIR/build/ios/*.ipa
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
     publishing:
       app_store_connect:
-        apple_id: $APP_STORE_CONNECT_APPLE_ID
-        api_key: $APP_STORE_CONNECT_API_KEY
-        api_issuer: $APP_STORE_CONNECT_API_ISSUER_ID
-        team_id: $APP_STORE_CONNECT_TEAM_ID 
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: true 
