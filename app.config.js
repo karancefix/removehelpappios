@@ -1,9 +1,18 @@
 import Constants from 'expo-constants';
 
-export default ({ config }) => ({
-  ...config,
-  expo: {
-    ...config.expo,
+export default () => {
+  // Debug: Log environment variables during build
+  console.log('Building with env vars:', {
+    supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
+    hasAnonKey: !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+  });
+
+  // Validate environment variables
+  if (!process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
+    console.warn('⚠️ Missing Supabase environment variables!');
+  }
+
+  return {
     name: "Remove.Help",
     slug: "remove",
     version: "1.0.1",
@@ -11,7 +20,6 @@ export default ({ config }) => ({
     icon: "./assets/images/icon.png",
     scheme: "myapp",
     userInterfaceStyle: "automatic",
-    newArchEnabled: true,
     splash: {
       image: "./assets/images/icon.png",
       resizeMode: "contain",
@@ -64,12 +72,13 @@ export default ({ config }) => ({
     },
     owner: "cursor1",
     extra: {
+      // Ensure environment variables are available at runtime
+      EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       router: {},
       eas: {
         projectId: "194f7ed6-16f4-4b42-9465-0e21677d7b95"
-      },
-      EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
-      EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+      }
     }
-  }
-}); 
+  };
+}; 
