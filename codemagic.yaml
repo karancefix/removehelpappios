@@ -1,0 +1,29 @@
+workflows:
+  ios-eas-build:
+    name: iOS EAS Build
+    environment:
+      vars:
+        EXPO_PUBLIC_SUPABASE_URL: $EXPO_PUBLIC_SUPABASE_URL
+        EXPO_PUBLIC_SUPABASE_ANON_KEY: $EXPO_PUBLIC_SUPABASE_ANON_KEY
+      node: 18.20.2
+      xcode: latest
+      cocoapods: default
+      expo-cli: latest
+      EAS_BUILD_PROFILE: production
+    scripts:
+      - name: Install dependencies
+        script: yarn install --frozen-lockfile || npm install
+      - name: EAS Build iOS
+        script: |
+          npx eas build --platform ios --profile production --non-interactive --auto-submit
+    artifacts:
+      - build/**/outputs/**/*.aab
+      - build/**/outputs/**/*.apk
+      - build/**/outputs/**/*.ipa
+      - build/**/outputs/**/*.app
+      - build/**/outputs/**/*.xcarchive
+      - build/**/outputs/**/*.dSYM.zip
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com 
