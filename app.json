@@ -17,7 +17,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.remove.help",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "This app uses the camera to allow you to take photos for background removal."
       }
     },
     "android": {
