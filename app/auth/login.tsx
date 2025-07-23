@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks/use_auth';
 
 export default function LoginScreen() {
   const { signIn } = useAuth();

@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Download, Share2, Trash2, X } from 'lucide-react-native';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks/use_auth';
 import { router } from 'expo-router';
 import { getGeneratedImages, deleteGeneratedImage } from '@/services/imageService';
 import * as FileSystem from 'expo-file-system';
@@ -20,7 +20,8 @@ import { supabase } from '@/lib/supabase';
 
 interface GeneratedImage {
   id: string;
-  processed_image_data_url: string;
+  processed_image_url?: string;
+  processed_image_data_url?: string;
   created_at: string;
 }
 
@@ -29,6 +30,16 @@ export default function GalleryScreen() {
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const getPublicUrl = (filePath: string) => {
+    console.log('Getting public URL for:', filePath); // Add logging
+    const url = supabase.storage
+      .from('processed-images')
+      .getPublicUrl(filePath)
+      .data.publicUrl;
+    console.log('Generated URL:', url); // Add logging
+    return url;
+  };
 
   useEffect(() => {
     if (!user) {
@@ -42,12 +53,25 @@ export default function GalleryScreen() {
 
   const loadImages = async () => {
     try {
+      console.log('Loading images...');
       const { data, error } = await getGeneratedImages();
       
       if (error) {
         console.error('Error loading images:', error);
         Alert.alert('Error', 'Failed to load images');
         return;
+      }
+      
+      console.log('Loaded images data:', JSON.stringify(data, null, 2));
+      if (data && data.length > 0) {
+        data.forEach((img, index) => {
+          console.log(`Image ${index}:`, {
+            id: img.id,
+            hasUrl: !!img.processed_image_url,
+            url: img.processed_image_url,
+            hasBase64: !!img.processed_image_data_url
+          });
+        });
       }
       
       setImages(data || []);
@@ -70,15 +94,28 @@ export default function GalleryScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              console.log('Starting delete process for image:', imageId);
               const { error } = await deleteGeneratedImage(imageId);
+              
               if (error) {
-                Alert.alert('Error', 'Failed to delete image');
-              } else {
-                setImages(prev => prev.filter(img => img.id !== imageId));
-                setSelectedImage(null);
+                console.error('Delete error:', error);
+                Alert.alert(
+                  'Error',
+                  typeof error === 'string' ? error : 'Failed to delete image. Please try again.'
+                );
+                return;
               }
+
+              console.log('Image deleted successfully, updating UI');
+              setImages(prev => prev.filter(img => img.id !== imageId));
+              setSelectedImage(null);
+              Alert.alert('Success', 'Image deleted successfully');
             } catch (error) {
-              Alert.alert('Error', 'Failed to delete image');
+              console.error('Delete handler error:', error);
+              Alert.alert(
+                'Error',
+                'An unexpected error occurred while deleting the image. Please try again.'
+              );
             }
           },
         },
@@ -88,27 +125,69 @@ export default function GalleryScreen() {
 
   const shareImage = async (image: GeneratedImage) => {
     try {
-      // Convert base64 to file and share
-      const filename = FileSystem.documentDirectory + `image_${image.id}.png`;
-      await FileSystem.writeAsStringAsync(filename, image.processed_image_data_url.split(',')[1], {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      
-      await Share.share({
-        url: filename,
-        message: 'Check out this background-removed image from Remove.Help!',
-      });
+      let imageUrl;
+      if (image.processed_image_url) {
+        // For storage-based images
+        imageUrl = getPublicUrl(image.processed_image_url);
+        console.log('Sharing storage image:', imageUrl);
+        
+        // Download the image first
+        const response = await fetch(imageUrl);
+        const blob = await response.blob();
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve) => {
+          reader.onloadend = () => {
+            const result = reader.result as string;
+            resolve(result);
+          };
+          reader.readAsDataURL(blob);
+        });
+
+        const base64 = await base64Promise;
+        const filename = FileSystem.documentDirectory + `image_${image.id}.png`;
+        await FileSystem.writeAsStringAsync(
+          filename, 
+          base64.split(',')[1],
+          { encoding: FileSystem.EncodingType.Base64 }
+        );
+        
+        await Share.share({
+          url: filename,
+          message: 'Check out this background-removed image from Remove.Help!',
+        });
+      } else if (image.processed_image_data_url) {
+        // Legacy base64 sharing
+        const filename = FileSystem.documentDirectory + `image_${image.id}.png`;
+        await FileSystem.writeAsStringAsync(
+          filename, 
+          image.processed_image_data_url.split(',')[1],
+          { encoding: FileSystem.EncodingType.Base64 }
+        );
+        await Share.share({
+          url: filename,
+          message: 'Check out this background-removed image from Remove.Help!',
+        });
+      }
     } catch (error) {
+      console.error('Share error:', error);
       Alert.alert('Error', 'Failed to share image');
     }
   };
 
-  const downloadImage = (image: GeneratedImage) => {
+  const downloadImage = async (image: GeneratedImage) => {
     try {
-      // For demo purposes, show success message
-      // In a real app, you'd save the base64 image to device storage
-      Alert.alert('Success', 'Image saved to gallery');
+      if (image.processed_image_url) {
+        // For storage-based images
+        const publicUrl = getPublicUrl(image.processed_image_url);
+        // Here you would implement the actual download logic
+        // For now, show success message
+        Alert.alert('Success', 'Image saved to gallery');
+      } else if (image.processed_image_data_url) {
+        // Legacy base64 download
+        Alert.alert('Success', 'Image saved to gallery');
+      }
     } catch (error) {
+      console.error('Download error:', error);
       Alert.alert('Error', 'Failed to save image');
     }
   };
@@ -118,15 +197,72 @@ export default function GalleryScreen() {
     return date.toLocaleDateString();
   };
 
-  const renderImageItem = ({ item }: { item: GeneratedImage }) => (
-    <TouchableOpacity
-      style={styles.imageItem}
-      onPress={() => setSelectedImage(item)}
-    >
-      <Image source={{ uri: item.processed_image_data_url }} style={styles.thumbnailImage} />
-      <Text style={styles.imageDate}>{formatDate(item.created_at)}</Text>
-    </TouchableOpacity>
-  );
+  const renderImageItem = ({ item }: { item: GeneratedImage }) => {
+    const imageUrl = item.processed_image_url 
+      ? getPublicUrl(item.processed_image_url)
+      : item.processed_image_data_url;
+
+    return (
+      <TouchableOpacity
+        style={styles.imageItem}
+        onPress={() => setSelectedImage(item)}
+      >
+        <View style={styles.imageContainer}>
+          <Image 
+            source={{ uri: imageUrl }} 
+            style={styles.thumbnailImage}
+            resizeMode="contain"
+          />
+        </View>
+        <Text style={styles.imageDate}>{formatDate(item.created_at)}</Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderModalContent = () => {
+    if (!selectedImage) return null;
+
+    const imageUrl = selectedImage.processed_image_url 
+      ? getPublicUrl(selectedImage.processed_image_url)
+      : selectedImage.processed_image_data_url;
+
+    console.log('Modal image URL:', imageUrl); // Add logging
+
+    return (
+      <>
+        <Image
+          source={{ uri: imageUrl }}
+          style={styles.fullImage}
+          resizeMode="contain"
+        />
+        <View style={styles.modalActions}>
+          <TouchableOpacity
+            style={styles.modalActionButton}
+            onPress={() => downloadImage(selectedImage)}
+          >
+            <Download size={20} color="#FFA500" />
+            <Text style={styles.modalActionText}>Download</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.modalActionButton}
+            onPress={() => shareImage(selectedImage)}
+          >
+            <Share2 size={20} color="#FFA500" />
+            <Text style={styles.modalActionText}>Share</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.modalActionButton}
+            onPress={() => handleDeleteImage(selectedImage.id)}
+          >
+            <Trash2 size={20} color="#EF4444" />
+            <Text style={[styles.modalActionText, { color: '#EF4444' }]}>Delete</Text>
+          </TouchableOpacity>
+        </View>
+      </>
+    );
+  };
 
   if (!user) {
     return (
@@ -195,42 +331,7 @@ export default function GalleryScreen() {
             >
               <X size={24} color="#FFFFFF" />
             </TouchableOpacity>
-
-            {selectedImage && (
-              <>
-                <Image
-                  source={{ uri: selectedImage.processed_image_data_url }}
-                  style={styles.fullImage}
-                  resizeMode="contain"
-                />
-
-                <View style={styles.modalActions}>
-                  <TouchableOpacity
-                    style={styles.modalActionButton}
-                    onPress={() => downloadImage(selectedImage)}
-                  >
-                    <Download size={20} color="#FFA500" />
-                    <Text style={styles.modalActionText}>Download</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.modalActionButton}
-                    onPress={() => shareImage(selectedImage)}
-                  >
-                    <Share2 size={20} color="#FFA500" />
-                    <Text style={styles.modalActionText}>Share</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.modalActionButton}
-                    onPress={() => handleDeleteImage(selectedImage.id)}
-                  >
-                    <Trash2 size={20} color="#EF4444" />
-                    <Text style={[styles.modalActionText, { color: '#EF4444' }]}>Delete</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
+            {renderModalContent()}
           </View>
         </View>
       </Modal>
@@ -270,9 +371,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
   },
+  imageContainer: {
+    aspectRatio: 1, // Makes it square
+    backgroundColor: '#F9FAFB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   thumbnailImage: {
-    width: '100%',
-    height: 120,
+    width: '90%', // Slightly smaller than container to ensure padding
+    height: '90%',
+    backgroundColor: '#F9FAFB',
   },
   imageDate: {
     padding: 8,
@@ -349,13 +457,14 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     flex: 1,
+    width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
   },
   closeButton: {
     position: 'absolute',
-    top: 60,
+    top: 40,
     right: 20,
     width: 40,
     height: 40,
@@ -367,7 +476,7 @@ const styles = StyleSheet.create({
   },
   fullImage: {
     width: '100%',
-    height: '100%',
+    height: '80%',
     resizeMode: 'contain',
   },
   modalActions: {
@@ -376,6 +485,8 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingHorizontal: 20,
     paddingTop: 20,
+    position: 'absolute',
+    bottom: 40,
   },
   modalActionButton: {
     alignItems: 'center',

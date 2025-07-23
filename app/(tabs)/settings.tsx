@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Bell, Moon, Image as ImageIcon, Shield, CircleHelp as HelpCircle, FileText, Trash2, ChevronRight } from 'lucide-react-native';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks/use_auth';
 import { router } from 'expo-router';
 import { deleteAccount } from '@/services/accountService';
 import * as WebBrowser from 'expo-web-browser';

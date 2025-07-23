@@ -20,7 +20,7 @@ import {
   LogOut,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks/use_auth';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 

@@ -154,14 +154,20 @@ export const getGeneratedImages = async (limit = 20, offset = 0) => {
       throw new Error('User not authenticated');
     }
 
+    // Add logging to see what's being returned
+    console.log('Fetching images for user:', user.id);
+    
     const { data, error } = await supabase
       .from('generated_images')
-      .select('*')
+      .select('id, processed_image_url, processed_image_data_url, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
     if (error) throw error;
+
+    // Log the returned data
+    console.log('Fetched images:', data);
 
     return { data, error: null };
   } catch (error) {
@@ -172,22 +178,72 @@ export const getGeneratedImages = async (limit = 20, offset = 0) => {
 
 export const deleteGeneratedImage = async (imageId: string) => {
   try {
+    console.log('Starting deleteGeneratedImage for ID:', imageId);
+    
+    // 1. Get user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
-      throw new Error('User not authenticated');
+      console.error('Authentication error:', userError);
+      return { error: 'Authentication failed' };
+    }
+    console.log('Authenticated as user:', user.id);
+
+    // 2. Get image details
+    const { data: image, error: fetchError } = await supabase
+      .from('generated_images')
+      .select('*')
+      .eq('id', imageId)
+      .single();
+
+    if (fetchError) {
+      console.error('Error fetching image:', fetchError);
+      return { error: 'Failed to fetch image details' };
     }
 
-    const { error } = await supabase
+    if (!image) {
+      console.error('Image not found');
+      return { error: 'Image not found' };
+    }
+
+    console.log('Found image:', image);
+
+    // 3. Delete from storage if URL exists
+    if (image.processed_image_url) {
+      console.log('Attempting to delete from storage:', image.processed_image_url);
+      try {
+        const { error: storageError } = await supabase.storage
+          .from('processed-images')
+          .remove([image.processed_image_url]);
+
+        if (storageError) {
+          console.error('Storage deletion error:', storageError);
+          // Continue with DB deletion even if storage deletion fails
+        } else {
+          console.log('Successfully deleted from storage');
+        }
+      } catch (storageError) {
+        console.error('Storage deletion threw error:', storageError);
+        // Continue with DB deletion even if storage deletion fails
+      }
+    }
+
+    // 4. Delete from database
+    console.log('Attempting to delete from database');
+    const { error: deleteError } = await supabase
       .from('generated_images')
       .delete()
-      .eq('id', imageId)
-      .eq('user_id', user.id); // Ensure user can only delete their own images
+      .match({ id: imageId, user_id: user.id });
 
-    if (error) throw error;
+    if (deleteError) {
+      console.error('Database deletion error:', deleteError);
+      return { error: 'Failed to delete from database' };
+    }
 
+    console.log('Successfully deleted from database');
     return { error: null };
+
   } catch (error) {
-    console.error('Error deleting image:', error);
-    return { error };
+    console.error('Unexpected error in deleteGeneratedImage:', error);
+    return { error: 'Unexpected error occurred' };
   }
 };

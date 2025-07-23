@@ -30,6 +30,9 @@
         "credentialsSource": "local",
         "gradleCommand": ":app:bundleRelease"
       },
+      "ios": {
+        "resourceClass": "m1-medium"
+      },
       "env": {
         "NODE_ENV": "production",
         "EXPO_PUBLIC_SUPABASE_URL": "https://kpzpsljkpvalemxgzsis.supabase.co",
@@ -38,6 +41,15 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "karandev.2050@gmail.com",
+        "ascAppId": "6748972075",
+        "appleTeamId": "PAAUN4QC6H",
+        "ascApiKeyPath": "./authkey.p8",
+        "ascApiKeyIssuerId": "7a5a1d8f-0ee1-4355-bf9b-4ac790ff7100",
+        "ascApiKeyId": "SHYD64KG3G"
+      }
+    }
   }
 }

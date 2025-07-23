@@ -5,7 +5,7 @@ import { Platform, LogBox, View, Text } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
-import { AuthProvider } from '@/hooks/useAuth';
+import { AuthProvider } from '@/hooks/use_auth';
 import 'react-native-url-polyfill/auto';
 
 // Ignore specific warnings that can cause crashes in production

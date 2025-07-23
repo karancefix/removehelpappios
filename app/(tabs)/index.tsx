@@ -9,17 +9,19 @@ import {
   Alert,
   Dimensions,
   ActivityIndicator,
+  Share, // Add this import
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Upload, Download, Share2, Star, ArrowRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks/use_auth';
 import { router } from 'expo-router';
 import { processImage } from '@/services/imageService';
-import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import { useLocalSearchParams } from 'expo-router';
+import * as MediaLibrary from 'expo-media-library';
+// Remove the expo-sharing import as we'll use React Native's Share
 
 const { width } = Dimensions.get('window');
 
@@ -139,26 +141,108 @@ export default function HomeScreen() {
     if (!processedImage) return;
     
     try {
-      // For demo purposes, show success message
-      // In a real app, you'd save the base64 image to device storage
-      Alert.alert('Success', 'Image saved to gallery');
+      // Request permission first
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Needed', 'Please grant permission to save images to your gallery.');
+        return;
+      }
+
+      // Create a temporary file
+      const filename = FileSystem.documentDirectory + `download_${Date.now()}.png`;
+
+      if (processedImage.startsWith('http')) {
+        // For storage-based images
+        const response = await fetch(processedImage);
+        const blob = await response.blob();
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve) => {
+          reader.onloadend = () => {
+            const result = reader.result as string;
+            resolve(result);
+          };
+          reader.readAsDataURL(blob);
+        });
+
+        const base64 = await base64Promise;
+        await FileSystem.writeAsStringAsync(
+          filename,
+          base64.split(',')[1],
+          { encoding: FileSystem.EncodingType.Base64 }
+        );
+      } else {
+        // For base64 images
+        await FileSystem.writeAsStringAsync(
+          filename,
+          processedImage.split(',')[1],
+          { encoding: FileSystem.EncodingType.Base64 }
+        );
+      }
+
+      // Save to media library
+      const asset = await MediaLibrary.createAssetAsync(filename);
+      await MediaLibrary.createAlbumAsync('Remove.Help', asset, false);
+
+      // Delete temporary file
+      await FileSystem.deleteAsync(filename);
+
+      Alert.alert('Success', 'Image saved to gallery in "Remove.Help" album');
     } catch (error) {
-      Alert.alert('Error', 'Failed to save image');
+      console.error('Download error:', error);
+      Alert.alert('Error', 'Failed to save image to gallery');
     }
   };
 
-  const shareImage = async () => {
-    if (!processedImage) return;
-    
+  const shareImage = async (imageUrl: string) => {
     try {
-      // Convert base64 to file and share
-      const filename = FileSystem.documentDirectory + 'processed_image.png';
-      await FileSystem.writeAsStringAsync(filename, processedImage.split(',')[1], {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      console.log('Sharing image:', imageUrl);
       
-      await Sharing.shareAsync(filename);
+      // Check if it's a storage URL or base64
+      if (imageUrl.startsWith('http')) {
+        // For storage-based images
+        console.log('Sharing storage image');
+        const response = await fetch(imageUrl);
+        const blob = await response.blob();
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve) => {
+          reader.onloadend = () => {
+            const result = reader.result as string;
+            resolve(result);
+          };
+          reader.readAsDataURL(blob);
+        });
+
+        const base64 = await base64Promise;
+        const filename = FileSystem.documentDirectory + `image_${Date.now()}.png`;
+        await FileSystem.writeAsStringAsync(
+          filename, 
+          base64.split(',')[1],
+          { encoding: FileSystem.EncodingType.Base64 }
+        );
+        
+        await Share.share({
+          url: filename,
+          title: 'Share Background Removed Image',
+          message: 'Check out this background-removed image from Remove.Help!'
+        });
+      } else {
+        // For base64 images
+        console.log('Sharing base64 image');
+        const filename = FileSystem.documentDirectory + `image_${Date.now()}.png`;
+        await FileSystem.writeAsStringAsync(
+          filename, 
+          imageUrl.split(',')[1],
+          { encoding: FileSystem.EncodingType.Base64 }
+        );
+        
+        await Share.share({
+          url: filename,
+          title: 'Share Background Removed Image',
+          message: 'Check out this background-removed image from Remove.Help!'
+        });
+      }
     } catch (error) {
+      console.error('Share error:', error);
       Alert.alert('Error', 'Failed to share image');
     }
   };
@@ -246,7 +330,7 @@ export default function HomeScreen() {
             <View style={styles.beforeAfterContainer}>
               <View style={styles.imageContainer}>
                 <Text style={styles.imageLabel}>Before</Text>
-                <Image source={{ uri: selectedImage }} style={styles.resultImage} />
+                <Image source={selectedImage ? { uri: selectedImage } : undefined} style={styles.resultImage} />
               </View>
               <ArrowRight size={24} color="#facc15" />
               <View style={styles.imageContainer}>
@@ -256,11 +340,14 @@ export default function HomeScreen() {
             </View>
             
             <View style={styles.actionButtons}>
-              <TouchableOpacity style={styles.actionButton} onPress={downloadImage}>
+              <TouchableOpacity style={styles.actionButton} onPress={() => downloadImage()}>
                 <Download size={20} color="#facc15" />
                 <Text style={styles.actionButtonText}>Download</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton} onPress={shareImage}>
+              <TouchableOpacity 
+                style={styles.actionButton} 
+                onPress={() => shareImage(processedImage)}
+              >
                 <Share2 size={20} color="#facc15" />
                 <Text style={styles.actionButtonText}>Share</Text>
               </TouchableOpacity>
